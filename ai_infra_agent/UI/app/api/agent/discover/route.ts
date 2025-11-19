@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    const response = await fetch(`${backendUrl}/api/v1/agent/discover`, {
+    const response = await fetch(`${backendUrl}/api/v1/discover`, {
       method: "POST",
       headers,
     });

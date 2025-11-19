@@ -8,11 +8,11 @@ import jwt from "jsonwebtoken";
  * Lấy user_id từ NextAuth session và tạo Supabase JWT token
  */
 export async function POST(request: NextRequest) {
-  console.log("NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log("NEXT_PUBLIC_SUPABASE_URL (from proxy):", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
   // --- DEBUGGING: Read body as text first ---
   const bodyAsText = await request.text();
-  console.log("Request body as text:", bodyAsText);
+  console.log("Request body as text (from proxy):", bodyAsText);
   // --- END DEBUGGING ---
 
   try {
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     
     const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
+    console.log("Constructed backendUrl (from proxy):", backendUrl); // <-- ADDED LOG
     
     // Prepare headers
     const headers: Record<string, string> = {
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("Error in agent process proxy:", error);
+    console.error("Full error object:", error); // <-- ADDED LOG
     return NextResponse.json(
       { detail: error.message || "Internal server error" },
       { status: 500 }
