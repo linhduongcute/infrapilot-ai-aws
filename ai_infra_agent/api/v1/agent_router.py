@@ -77,8 +77,8 @@ async def discover_resources(
     logger: Any = Depends(get_logger),
 ):
     """
-    Initiates a scan of the user's AWS account to discover existing resources.
-    This endpoint creates temporary, user-specific components to perform the scan correctly.
+    Initiates a scan of the user's AWS account to discover existing resources,
+    prunes stale records, and upserts the current state.
     """
     user_id = user_creds.get("user_id")
     logger.info(f"[DISCOVER] Starting user-specific discovery for user {user_id}")
@@ -95,18 +95,16 @@ async def discover_resources(
         )
         
         # 2. Create adapters with the user-specific session
-        # This works with the original (non-refactored) adapter code
         user_aws_settings = AWSSettings(**aws_creds)
         rds_adapter = RdsAdapter(settings=user_aws_settings, logger=logger)
-        # Ghi đè client mặc định bằng client của người dùng
         rds_adapter.client = user_session.client("rds")
 
-        # 3. Create scanner and overwrite its session
+        # 3. Create scanner and configure it
         tool_factory = get_tool_factory()
         scanner = DiscoveryScanner(tool_factory=tool_factory, rds_adapter=rds_adapter)
         scanner.aws_session = user_session
 
-        # 4. Scan resources
+        # 4. Scan resources from AWS
         logger.info(f"Scanner configured. Starting scan for user {user_id}.")
         discovered_infra_state = await scanner.scan_aws_resources()
         logger.info(f"Discovery complete for user {user_id}. Found {len(discovered_infra_state.resources)} total resources.")
@@ -114,7 +112,6 @@ async def discover_resources(
         # 5. Transform and collect resources for DB
         resources_to_upsert = []
         aws_region = aws_creds.get("region", "us-east-1")
-        # Correctly iterate over the resources dictionary
         for resource in discovered_infra_state.resources.values():
             resources_to_upsert.append({
                 "user_id": user_id,
@@ -124,19 +121,39 @@ async def discover_resources(
                 "properties": convert_datetimes_to_iso_string(resource.properties),
             })
         
-        if not resources_to_upsert:
-            return {"message": "Discovery finished. No AWS resources found."}
-
-        # 6. Upsert data into the database
-        logger.info(f"Saving {len(resources_to_upsert)} resources to the database...")
         supabase = get_supabase_client()
-        response = supabase.from_("discovered_resources").upsert(
-            resources_to_upsert, on_conflict="user_id,resource_id"
-        ).execute()
+        scanned_ids = {r["resource_id"] for r in resources_to_upsert}
 
+        # 6. Fetch existing resource IDs from DB for comparison
+        logger.info("Fetching existing DB records for pruning...")
+        db_resources_response = supabase.from_("discovered_resources").select("resource_id").eq("user_id", user_id).execute()
+        
+        # 7. Determine which resources are stale and delete them
+        if db_resources_response.data:
+            db_ids = {r["resource_id"] for r in db_resources_response.data}
+            ids_to_delete = list(db_ids - scanned_ids)
+            
+            if ids_to_delete:
+                logger.info(f"Pruning {len(ids_to_delete)} stale resources from the database.")
+                supabase.from_("discovered_resources").delete().in_("resource_id", ids_to_delete).execute()
+            else:
+                logger.info("No stale resources to prune.")
+        else:
+            logger.info("No existing resources found in DB, skipping prune.")
 
+        # 8. Upsert current data into the database
+        if resources_to_upsert:
+            logger.info(f"Saving {len(resources_to_upsert)} current resources to the database...")
+            upsert_response = supabase.from_("discovered_resources").upsert(
+                resources_to_upsert, on_conflict="user_id,resource_id"
+            ).execute()
+            if upsert_response.data:
+                message = f"Discovery successful. Synced {len(upsert_response.data)} resources."
+            else:
+                message = "Discovery successful. No changes detected."
+        else:
+            message = "Discovery finished. No AWS resources found."
 
-        message = f"Discovery successful. Saved or updated {len(resources_to_upsert)} resources."
         logger.info(message)
         return {"message": message}
 

@@ -22,7 +22,7 @@ class EC2Adapter(AWSAdapterBase):
 
     def list_instances(self, instance_ids: List[str] = None) -> Dict[str, Any]:
         """
-        Lists EC2 instances.
+        Lists EC2 instances that are not in a 'terminated' state.
 
         Args:
             instance_ids (List[str], optional): A list of instance IDs to filter by. Defaults to None.
@@ -30,12 +30,20 @@ class EC2Adapter(AWSAdapterBase):
         Returns:
             Dict[str, Any]: The response from the describe_instances call.
         """
-        self.logger.info(f"Listing EC2 instances with IDs: {instance_ids}")
+        self.logger.info(f"Listing non-terminated EC2 instances with IDs: {instance_ids}")
         try:
+            # Filters to exclude terminated instances
+            filters = [
+                {
+                    'Name': 'instance-state-name',
+                    'Values': ['pending', 'running', 'shutting-down', 'stopping', 'stopped']
+                }
+            ]
+            
             if instance_ids:
-                return self.client.describe_instances(InstanceIds=instance_ids)
+                return self.client.describe_instances(InstanceIds=instance_ids, Filters=filters)
             else:
-                return self.client.describe_instances()
+                return self.client.describe_instances(Filters=filters)
         except Exception as e:
             self.logger.error(f"Error listing EC2 instances: {e}")
             raise
