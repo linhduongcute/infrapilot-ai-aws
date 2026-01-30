@@ -158,3 +158,13 @@ Contributions are welcome to make this project even better! Please feel free to 
 ## 📄 License
 
 This project is licensed under the MIT License. See the `LICENSE` file for more details.
+
+## 👥 Contributors
+
+This project is developed by:
+
+- **Nguyen Hai An** (23020581)
+- **Ngo Thi Thao Linh** (23020620)
+- **Nguyen Que Son** (23020641)
+
+**Note**: This repository is a re-upload of the original group assignment project. The original repository can be found at: https://github.com/sines05/infrapilot-ai-aws
